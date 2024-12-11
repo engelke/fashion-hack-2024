@@ -16,7 +16,7 @@ bucket = storage_client.bucket(bucket_name)
 # Initialize Firestore and Vertex AI
 db = firestore.Client()
 vertexai.init(project="your-project-id", location="us-west1")  # Initialize Vertex AI
-model = vertexai.GenerativeModel.from_pretrained("gemini-pro")  # Load the Gemini model
+model = vertexai.GenerativeModel("gemini-pro")  # Load the Gemini model
 
 
 @app.route("/", methods=["GET", "POST"])
