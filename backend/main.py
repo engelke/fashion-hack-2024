@@ -67,7 +67,7 @@ def add_metadata_to_firestore(filename):
         # Create a new document in Firestore
         doc_ref = db.collection("clothes").document()
         doc_ref.set({
-            "image_url": filename, # FIXME: this is probably not what we want here.
+            "image_url": blob.public_url,
             "clothing_type": metadata.get("clothing_type", ""),
             "color": metadata.get("color", ""),
             "style": metadata.get("style", ""),
