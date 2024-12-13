@@ -17,6 +17,26 @@ class Item {
     required this.occasion,
   });
 
+  Item copyWith({
+    String? id,
+    String? imageUrl,
+    String? clothingType,
+    String? color,
+    String? style,
+    String? material,
+    String? occasion,
+  }) {
+    return Item(
+      id: id ?? this.id,
+      imageUrl: imageUrl ?? this.imageUrl,
+      clothingType: clothingType ?? this.clothingType,
+      color: color ?? this.color,
+      style: style ?? this.style,
+      material: material ?? this.material,
+      occasion: occasion ?? this.occasion,
+    );
+  }
+
   factory Item.fromJson(Map<String, dynamic> json, {String? id}) {
     // Helper function to handle array or string
     String getFirstStringOrValue(dynamic value) {

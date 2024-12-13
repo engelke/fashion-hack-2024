@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide Text;
+import 'package:flutter/material.dart' as material show Text, TextStyle;
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../models/item.dart';
 import '../services/api_service.dart';
-import '../screens/add_item_screen.dart';
-import '../screens/settings_screen.dart';
+import '../services/vision_service.dart';
+import '../models/item.dart';
 import '../widgets/logo.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -40,6 +41,31 @@ class _HomeScreenState extends State<HomeScreen> {
     Colors.cyan,
   ];
 
+  String? _expression;
+  String? _temperature;
+  String? _season;
+  String? _outfitSuggestions;
+  bool _isLoadingSuggestions = false;
+
+  final Map<String, String> _imageUrlCache = {};
+  final Set<String> _failedImageIds = {};
+
+  final TextStyle _cardTitleStyle = GoogleFonts.inter(
+    color: Colors.white,
+    fontWeight: FontWeight.w600,
+    fontSize: 14,
+    height: 1.3,
+    shadows: [
+      Shadow(
+        offset: const Offset(0, 1),
+        blurRadius: 3.0,
+        color: Colors.black.withOpacity(0.5),
+      ),
+    ],
+  );
+
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   @override
   void initState() {
     super.initState();
@@ -47,94 +73,89 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadItems() async {
+    setState(() => _isLoading = true);
     try {
-      final items = await _apiService.getItems();
-      setState(() {
-        _items = items;
-        // Extract unique values from the database
-        _availableCategories =
-            items.map((item) => toTitleCase(item.clothingType)).toSet();
-        _availableColors = items.map((item) => toTitleCase(item.color)).toSet();
-        _availableStyles = items.map((item) => toTitleCase(item.style)).toSet();
-        _applyFiltersAndSort();
-        _isLoading = false;
-      });
+      final items = await ApiService().getItems();
+      if (mounted) {
+        setState(() {
+          _items = items;
+          // Cache the signed URLs that we got from the API service
+          for (var item in items) {
+            _imageUrlCache[item.id] = item.imageUrl;
+          }
+          _availableCategories =
+              _items.map((item) => toTitleCase(item.clothingType)).toSet();
+          _availableColors =
+              _items.map((item) => toTitleCase(item.color)).toSet();
+          _availableStyles =
+              _items.map((item) => toTitleCase(item.style)).toSet();
+          _applyFiltersAndSort();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
+      print('Error loading items: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  String? _getCachedImageUrl(String itemId) {
+    return _imageUrlCache[itemId];
   }
 
   void _applyFiltersAndSort() {
-    List<Item> filtered = List.from(_items);
-
-    // Apply category filter
-    if (_selectedCategory != null) {
-      filtered = filtered.where((item) {
-        return toTitleCase(item.clothingType) == _selectedCategory;
-      }).toList();
-    }
-
-    // Apply color filter
-    if (_selectedColor != null) {
-      filtered = filtered.where((item) {
-        return toTitleCase(item.color) == _selectedColor;
-      }).toList();
-    }
-
-    // Apply style filter
-    if (_selectedStyle != null) {
-      filtered = filtered.where((item) {
-        return toTitleCase(item.style) == _selectedStyle;
-      }).toList();
-    }
-
     setState(() {
-      _filteredItems = filtered;
+      _filteredItems = _items
+          .where((item) =>
+              (_selectedCategory == null ||
+                  toTitleCase(item.clothingType) == _selectedCategory) &&
+              (_selectedColor == null ||
+                  toTitleCase(item.color) == _selectedColor) &&
+              (_selectedStyle == null ||
+                  toTitleCase(item.style) == _selectedStyle))
+          .toList();
+      print(
+          'Applied filters: Category: $_selectedCategory, Color: $_selectedColor, Style: $_selectedStyle');
+      print('Filtered to ${_filteredItems.length} items');
     });
   }
 
-  Widget _buildFilterDropdown(String label, String? value, Set<String> options,
-      void Function(String?) onChanged) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey[300]!),
-          borderRadius: BorderRadius.circular(8),
+  Widget _buildFilterDropdown(
+    String label,
+    String? value,
+    Set<String> options,
+    void Function(String?) onChanged,
+  ) {
+    return Expanded(
+      child: DropdownButton<String>(
+        value: value,
+        hint: material.Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: Colors.grey[600],
+          ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: DropdownButton<String>(
-          value: value,
-          hint: Text(
-            label,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              color: Colors.grey[700],
+        isExpanded: true,
+        items: [
+          DropdownMenuItem<String>(
+            value: null,
+            child: material.Text(
+              'All $label\s',
+              style: GoogleFonts.inter(fontSize: 14),
             ),
           ),
-          underline: const SizedBox(),
-          icon: Icon(Icons.arrow_drop_down, color: Colors.grey[700]),
-          borderRadius: BorderRadius.circular(8),
-          items: [
-            DropdownMenuItem<String>(
-              value: null,
-              child: Text(
-                'All $label\s',
-                style: GoogleFonts.inter(fontSize: 14),
-              ),
-            ),
-            ...options.map((option) => DropdownMenuItem<String>(
-                  value: option,
-                  child: Text(
-                    option,
-                    style: GoogleFonts.inter(fontSize: 14),
-                  ),
-                )),
-          ],
-          onChanged: onChanged,
-        ),
+          ...options.map((option) => DropdownMenuItem<String>(
+                value: option,
+                child: material.Text(
+                  option,
+                  style: GoogleFonts.inter(fontSize: 14),
+                ),
+              )),
+        ],
+        onChanged: onChanged,
       ),
     );
   }
@@ -146,20 +167,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     return _styleColors[style]!;
   }
-
-  TextStyle get _cardTitleStyle => GoogleFonts.inter(
-        color: Colors.white,
-        fontWeight: FontWeight.w600,
-        fontSize: 14,
-        height: 1.3,
-        shadows: [
-          Shadow(
-            offset: const Offset(0, 1),
-            blurRadius: 3.0,
-            color: Colors.black.withOpacity(0.5),
-          ),
-        ],
-      );
 
   TextStyle get _modalTitleStyle => GoogleFonts.inter(
         fontWeight: FontWeight.w600,
@@ -179,27 +186,18 @@ class _HomeScreenState extends State<HomeScreen> {
       );
 
   Widget _buildStyleBadge(String style) {
-    final color = _getStyleColor(style);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(4),
-        boxShadow: [
-          BoxShadow(
-            offset: const Offset(0, 1),
-            blurRadius: 2.0,
-            color: Colors.black.withOpacity(0.2),
-          ),
-        ],
+        color: Colors.black.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(
+      child: material.Text(
         toTitleCase(style),
         style: GoogleFonts.inter(
-          color: Colors.white,
-          fontSize: 11,
+          fontSize: 12,
           fontWeight: FontWeight.w500,
-          letterSpacing: 0.3,
+          color: Colors.white,
         ),
       ),
     );
@@ -234,16 +232,37 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      Image.network(
-                        item.imageUrl,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            color: Colors.grey[200],
-                            child: const Icon(Icons.broken_image,
-                                color: Colors.grey),
-                          );
-                        },
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: FutureBuilder<String?>(
+                          future: ApiService().getSignedUrl(item.imageUrl),
+                          builder: (context, snapshot) {
+                            if (snapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const Center(
+                                child: CircularProgressIndicator(),
+                              );
+                            }
+                            if (snapshot.hasError || !snapshot.hasData) {
+                              return Container(
+                                color: Colors.grey[200],
+                                child: const Icon(Icons.broken_image,
+                                    color: Colors.grey),
+                              );
+                            }
+                            return Image.network(
+                              snapshot.data!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  color: Colors.grey[200],
+                                  child: const Icon(Icons.broken_image,
+                                      color: Colors.grey),
+                                );
+                              },
+                            );
+                          },
+                        ),
                       ),
                       Positioned(
                         bottom: 0,
@@ -263,7 +282,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           padding: const EdgeInsets.all(8),
-                          child: Text(
+                          child: material.Text(
                             title,
                             style: _cardTitleStyle,
                             maxLines: 2,
@@ -288,120 +307,411 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showItemDetails(BuildContext context, Item item) {
-    final title =
+    final cachedUrl = _getCachedImageUrl(item.id);
+    if (cachedUrl == null) return;
+
+    final itemTitle =
         '${toTitleCase(item.color)} ${toTitleCase(item.material)} ${toTitleCase(item.clothingType)}';
+    final showOccasion =
+        item.occasion.toLowerCase() != item.style.toLowerCase();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.6,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
-        expand: false,
-        builder: (context, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                Stack(
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => DraggableScrollableSheet(
+          initialChildSize: 0.9,
+          maxChildSize: 0.9,
+          minChildSize: 0.5,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: SingleChildScrollView(
+                controller: scrollController,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    AspectRatio(
-                      aspectRatio: 1,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          item.imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              color: Colors.grey[200],
-                              child: const Icon(Icons.broken_image,
-                                  color: Colors.grey),
-                            );
-                          },
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 12, bottom: 8),
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[300],
+                          borderRadius: BorderRadius.circular(2),
                         ),
                       ),
                     ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: _buildStyleBadge(item.style),
+                    Stack(
+                      children: [
+                        Container(
+                          height: MediaQuery.of(context).size.width -
+                              40, // Square aspect ratio
+                          margin: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: Image.network(
+                              cachedUrl,
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                              frameBuilder: (context, child, frame,
+                                  wasSynchronouslyLoaded) {
+                                if (wasSynchronouslyLoaded || frame != null) {
+                                  return child;
+                                }
+                                return Container(
+                                  color: Colors.grey[200],
+                                  child: const Center(
+                                      child: CircularProgressIndicator()),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                Navigator.pop(context);
+                                return const SizedBox.shrink();
+                              },
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          top: 20,
+                          right: 32,
+                          child: _buildStyleBadge(item.style),
+                        ),
+                      ],
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                      child: material.Text(
+                        itemTitle,
+                        style: GoogleFonts.inter(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w600,
+                          height: 1.2,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Colors.blue.shade50,
+                            Colors.purple.shade50,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.style, size: 24),
+                              const SizedBox(width: 12),
+                              material.Text(
+                                'Get Outfit Ideas',
+                                style: GoogleFonts.inter(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  decoration: InputDecoration(
+                                    labelText: 'Expression',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                  ),
+                                  value: _expression,
+                                  items: ['Masculine', 'Feminine']
+                                      .map((e) => DropdownMenuItem(
+                                          value: e, child: material.Text(e)))
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setModalState(() => _expression = value),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  decoration: InputDecoration(
+                                    labelText: 'Temperature',
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                  ),
+                                  value: _temperature,
+                                  items: ['Hot', 'Cold']
+                                      .map((e) => DropdownMenuItem(
+                                          value: e, child: material.Text(e)))
+                                      .toList(),
+                                  onChanged: (value) =>
+                                      setModalState(() => _temperature = value),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            decoration: InputDecoration(
+                              labelText: 'Season',
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white,
+                            ),
+                            value: _season,
+                            items: ['Spring', 'Summer', 'Fall', 'Winter']
+                                .map((e) => DropdownMenuItem(
+                                    value: e, child: material.Text(e)))
+                                .toList(),
+                            onChanged: (value) =>
+                                setModalState(() => _season = value),
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                backgroundColor: Colors.black87,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              onPressed: _expression != null &&
+                                      _temperature != null &&
+                                      _season != null &&
+                                      !_isLoadingSuggestions
+                                  ? () async {
+                                      setModalState(() {
+                                        _isLoadingSuggestions = true;
+                                        _outfitSuggestions = null;
+                                      });
+                                      try {
+                                        final suggestions =
+                                            await VisionService()
+                                                .getOutfitSuggestions(
+                                          item:
+                                              '${item.color} ${item.material} ${item.style} ${item.clothingType}',
+                                          expression: _expression!,
+                                          temperature: _temperature!,
+                                          season: _season!,
+                                        );
+                                        setModalState(() {
+                                          _outfitSuggestions = suggestions;
+                                          _isLoadingSuggestions = false;
+                                        });
+                                      } catch (e) {
+                                        setModalState(() {
+                                          _isLoadingSuggestions = false;
+                                        });
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          const SnackBar(
+                                            content: material.Text(
+                                                'Failed to get outfit suggestions'),
+                                          ),
+                                        );
+                                      }
+                                    }
+                                  : null,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  if (_isLoadingSuggestions)
+                                    Container(
+                                      width: 20,
+                                      height: 20,
+                                      margin: const EdgeInsets.only(right: 12),
+                                      child: const CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    ),
+                                  material.Text(
+                                    _isLoadingSuggestions
+                                        ? 'Getting Ideas...'
+                                        : 'Get Outfit Ideas',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (_outfitSuggestions != null) ...[
+                            const SizedBox(height: 24),
+                            Container(
+                              margin: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: MarkdownBody(
+                                data: _outfitSuggestions!,
+                                selectable: true,
+                                styleSheet: MarkdownStyleSheet(
+                                  p: TextStyle(
+                                    fontSize: 14,
+                                    height: 1.5,
+                                    color: Colors.black87,
+                                    fontFamily: 'Inter',
+                                  ),
+                                  strong: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                    height: 2,
+                                    fontFamily: 'Inter',
+                                  ),
+                                  listBullet: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.black87,
+                                    fontFamily: 'Inter',
+                                  ),
+                                  blockSpacing: 12,
+                                  listIndent: 20,
+                                  listBulletPadding:
+                                      const EdgeInsets.only(right: 8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[50],
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey[100]!),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildDetailRow('Material', item.material),
+                                if (showOccasion) ...[
+                                  const Divider(height: 24),
+                                  _buildDetailRow('Occasion', item.occasion),
+                                ],
+                                const Divider(height: 24),
+                                _buildDetailRow('Style', item.style),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                Text(
-                  title,
-                  style: _modalTitleStyle,
-                ),
-                const SizedBox(height: 24),
-                _buildDetailRow('Material', toTitleCase(item.material)),
-                _buildDetailRow('Occasion', toTitleCase(item.occasion)),
-                _buildDetailRow('Style', toTitleCase(item.style)),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  onPressed: () {
-                    // TODO: Implement edit functionality
-                    Navigator.pop(context);
-                  },
-                  icon: const Icon(Icons.edit),
-                  label: Text(
-                    'Edit Item',
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                    ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 48),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
   }
 
+  Widget _buildDetailImage(Item item) {
+    final cachedUrl = _getCachedImageUrl(item.id);
+    if (cachedUrl == null) {
+      return Container(
+        color: Colors.grey[200],
+        child: const Icon(Icons.broken_image, color: Colors.grey),
+      );
+    }
+
+    return Image.network(
+      cachedUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (context, error, stackTrace) {
+        return Container(
+          color: Colors.grey[200],
+          child: const Icon(Icons.broken_image, color: Colors.grey),
+        );
+      },
+    );
+  }
+
   Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(
-              label,
-              style: _detailLabelStyle,
+    return Row(
+      children: [
+        SizedBox(
+          width: 100,
+          child: material.Text(
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Colors.grey[600],
             ),
           ),
-          Expanded(
-            child: Text(
-              value,
-              style: _detailValueStyle,
+        ),
+        Expanded(
+          child: material.Text(
+            toTitleCase(value),
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -412,9 +722,9 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.blue.withOpacity(0.9),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: const Text(
+      child: const material.Text(
         'Coming Soon',
-        style: TextStyle(
+        style: material.TextStyle(
           color: Colors.white,
           fontSize: 9,
           fontWeight: FontWeight.w500,
@@ -441,27 +751,29 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           ListTile(
-            title: const Text('Closet'),
+            title: const material.Text('Closet'),
             leading: const Icon(Icons.grid_view),
             onTap: () {
               Navigator.pop(context);
             },
           ),
           ListTile(
-            title: const Text('Add Item'),
+            title: Row(
+              children: [
+                const Expanded(child: material.Text('Add Item')),
+                const SizedBox(width: 8),
+                _buildComingSoonBadge(),
+              ],
+            ),
             leading: const Icon(Icons.add_circle_outline),
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddItemScreen()),
-              );
             },
           ),
           ListTile(
             title: Row(
               children: [
-                const Expanded(child: Text('Stats')),
+                const Expanded(child: material.Text('Stats')),
                 const SizedBox(width: 8),
                 _buildComingSoonBadge(),
               ],
@@ -474,7 +786,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ListTile(
             title: Row(
               children: [
-                const Expanded(child: Text('Items from Email')),
+                const Expanded(child: material.Text('Items from Email')),
                 const SizedBox(width: 8),
                 _buildComingSoonBadge(),
               ],
@@ -487,7 +799,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ListTile(
             title: Row(
               children: [
-                const Expanded(child: Text('Boards')),
+                const Expanded(child: material.Text('Boards')),
                 const SizedBox(width: 8),
                 _buildComingSoonBadge(),
               ],
@@ -500,7 +812,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ListTile(
             title: Row(
               children: [
-                const Expanded(child: Text('Outfit of the Day')),
+                const Expanded(child: material.Text('Outfit of the Day')),
                 const SizedBox(width: 8),
                 _buildComingSoonBadge(),
               ],
@@ -511,14 +823,16 @@ class _HomeScreenState extends State<HomeScreen> {
             },
           ),
           ListTile(
-            title: const Text('Settings'),
+            title: Row(
+              children: [
+                const Expanded(child: material.Text('Settings')),
+                const SizedBox(width: 8),
+                _buildComingSoonBadge(),
+              ],
+            ),
             leading: const Icon(Icons.settings),
             onTap: () {
               Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SettingsScreen()),
-              );
             },
           ),
         ],
@@ -526,185 +840,238 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildResponsiveGrid(BuildContext context) {
-    final width = MediaQuery.of(context).size.width;
+  String _getItemTitle(Item item) {
+    return '${toTitleCase(item.color)} ${toTitleCase(item.clothingType)}';
+  }
 
-    // Calculate number of columns based on screen width
-    int crossAxisCount;
-    if (width < 500) {
-      crossAxisCount = 1;
-    } else if (width < 600) {
-      crossAxisCount = 2;
-    } else if (width < 900) {
-      crossAxisCount = 3;
-    } else {
-      crossAxisCount = 4;
+  Widget _buildGridItem(BuildContext context, Item item) {
+    final cachedUrl = _getCachedImageUrl(item.id);
+    if (cachedUrl == null) {
+      print('No cached URL for item ${item.id}');
+      return const SizedBox.shrink();
     }
 
-    return GridView.builder(
-      padding: const EdgeInsets.all(12),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: crossAxisCount,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.8, // Makes items half as tall (0.75 * 2 = 1.5)
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: () => _showItemDetails(context, item),
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.network(
+              cachedUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                print('Error loading image for item ${item.id}: $error');
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.broken_image, color: Colors.grey),
+                  ),
+                );
+              },
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  print('Successfully loaded image for item ${item.id}');
+                  return child;
+                }
+                return Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(child: CircularProgressIndicator()),
+                );
+              },
+            ),
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.8),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+                padding: const EdgeInsets.all(8),
+                child: material.Text(
+                  _getItemTitle(item),
+                  style: _cardTitleStyle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-      itemCount: _filteredItems.length,
-      itemBuilder: (context, index) {
-        final item = _filteredItems[index];
-        return _buildItemCard(item);
-      },
+    );
+  }
+
+  Widget _buildFilterBar() {
+    return Column(
+      children: [
+        // Category tabs
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            children: [
+              // "All" category chip
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  label: material.Text(
+                    'All Items',
+                    style: GoogleFonts.inter(
+                      fontWeight: _selectedCategory == null
+                          ? FontWeight.w600
+                          : FontWeight.w400,
+                    ),
+                  ),
+                  selected: _selectedCategory == null,
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() {
+                        _selectedCategory = null;
+                        _applyFiltersAndSort();
+                      });
+                    }
+                  },
+                ),
+              ),
+              ..._availableCategories.map((category) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ChoiceChip(
+                    label: material.Text(
+                      category,
+                      style: GoogleFonts.inter(
+                        fontWeight: _selectedCategory == category
+                            ? FontWeight.w600
+                            : FontWeight.w400,
+                      ),
+                    ),
+                    selected: _selectedCategory == category,
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedCategory = selected ? category : null;
+                        _applyFiltersAndSort();
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            ],
+          ),
+        ),
+        // Filter dropdowns
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+          child: Row(
+            children: [
+              material.Text(
+                'Filter by:',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 12),
+              _buildFilterDropdown(
+                'Color',
+                _selectedColor,
+                _availableColors,
+                (value) {
+                  setState(() {
+                    _selectedColor = value;
+                    _applyFiltersAndSort();
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildFilterDropdown(
+                'Style',
+                _selectedStyle,
+                _availableStyles,
+                (value) {
+                  setState(() {
+                    _selectedStyle = value;
+                    _applyFiltersAndSort();
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
-        title: Text(
+        title: material.Text(
           'Closet',
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
           ),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.menu),
+            onPressed: () => _scaffoldKey.currentState?.openEndDrawer(),
+          ),
+        ],
       ),
-      drawer: _buildDrawer(),
-      body: _isLoading
-          ? SizedBox.expand(
-              child: Container(
-                width: size.width,
-                height: size.height,
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: const Center(
-                  child: CircularProgressIndicator(),
-                ),
-              ),
-            )
-          : Column(
-              children: [
-                // Category tabs
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      // "All" category chip
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: ChoiceChip(
-                          label: Text(
-                            'All Items',
-                            style: GoogleFonts.inter(
-                              fontWeight: _selectedCategory == null
-                                  ? FontWeight.w600
-                                  : FontWeight.w400,
-                            ),
+      endDrawer: _buildDrawer(),
+      body: Column(
+        children: [
+          _buildFilterBar(),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredItems.isEmpty
+                    ? Center(
+                        child: material.Text(
+                          'No items found',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            color: Colors.grey[600],
                           ),
-                          selected: _selectedCategory == null,
-                          onSelected: (selected) {
-                            if (selected) {
-                              setState(() {
-                                _selectedCategory = null;
-                                _applyFiltersAndSort();
-                              });
-                            }
-                          },
                         ),
-                      ),
-                      ..._availableCategories.map((category) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: ChoiceChip(
-                            label: Text(
-                              category,
-                              style: GoogleFonts.inter(
-                                fontWeight: _selectedCategory == category
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
-                              ),
-                            ),
-                            selected: _selectedCategory == category,
-                            onSelected: (selected) {
-                              setState(() {
-                                _selectedCategory = selected ? category : null;
-                                _applyFiltersAndSort();
-                              });
-                            },
-                          ),
-                        );
-                      }).toList(),
-                    ],
-                  ),
-                ),
-
-                // Filter dropdowns
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0, vertical: 8.0),
-                  child: Row(
-                    children: [
-                      Text(
-                        'Filter by:',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: Colors.grey[700],
-                          fontWeight: FontWeight.w500,
+                      )
+                    : GridView.builder(
+                        padding: const EdgeInsets.all(16),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          childAspectRatio: 0.7,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      _buildFilterDropdown(
-                        'Color',
-                        _selectedColor,
-                        _availableColors,
-                        (value) {
-                          setState(() {
-                            _selectedColor = value;
-                            _applyFiltersAndSort();
-                          });
+                        itemCount: _filteredItems.length,
+                        itemBuilder: (context, index) {
+                          final item = _filteredItems[index];
+                          return _buildGridItem(context, item);
                         },
                       ),
-                      const SizedBox(width: 8),
-                      _buildFilterDropdown(
-                        'Style',
-                        _selectedStyle,
-                        _availableStyles,
-                        (value) {
-                          setState(() {
-                            _selectedStyle = value;
-                            _applyFiltersAndSort();
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Grid of items
-                Expanded(
-                  child: _filteredItems.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No items found',
-                            style: GoogleFonts.inter(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        )
-                      : _buildResponsiveGrid(context),
-                ),
-              ],
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const AddItemScreen()),
-          );
-        },
-        child: const Icon(Icons.add),
+          ),
+        ],
       ),
     );
   }
