@@ -1,14 +1,139 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html>
 <head>
-    <title>File Upload</title>
+    <title>Outfit Analyzer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0; /* Light gray background */
+        }
+
+        #upload-container {
+            border: 2px dashed #ccc; /* Dashed border */
+            border-radius: 10px;
+            padding: 50px;
+            text-align: center;
+            background-color: #fff; /* White background for the drop area */
+        }
+        #progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4CAF50; /* Green progress bar */
+            transition: width 0.5s; /* Smooth transition */
+            border-radius: 5px; /* Rounded corners for the progress bar */
+            margin-top: 20px;
+        }
+
+        h1 { color: #333;}
+
+    </style>
 </head>
 <body>
-    <h1>Upload a Photo</h1>
-    <form method="POST" enctype="multipart/form-data">
-        <input type="file" name="file">
-        <input type="submit" value="Upload">
-    </form>
+    <h1>Analyze Your Outfit</h1>
+    <p>Upload a photo of your outfit to get started.</p>
+
+    <div id="upload-container">
+        <input type="file" name="file" id="file-input" style="display: none;">  
+        <label for="file-input" class="drag-drop-area">Drag and Drop or Click to Upload</label><br>
+
+        <div id="progress-bar"></div>
+        <span id="progress-text"></span>
+    </div>
+
+    <script>
+        const uploadContainer = document.getElementById('upload-container');
+        const fileInput = document.getElementById('file-input');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const dragDropArea = document.querySelector('.drag-drop-area');
+
+        uploadContainer.addEventListener('dragenter', (e) => {
+            e.preventDefault();
+            uploadContainer.style.backgroundColor = '#e0e0e0'; // Slightly darker background on hover
+        });
+
+        uploadContainer.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dragDropArea.textContent = 'Drop File Here'
+        });
+
+
+        uploadContainer.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadContainer.style.backgroundColor = '#fff'; // Reset background color
+            dragDropArea.textContent = 'Drag and Drop or Click to Upload'
+        });
+
+
+        uploadContainer.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            handleFiles(files);
+            uploadContainer.style.backgroundColor = '#fff'; // Reset background
+            dragDropArea.textContent = 'Drag and Drop or Click to Upload'
+
+
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            handleFiles(files);
+        });
+
+        dragDropArea.addEventListener('click', () => {
+            fileInput.click(); // Simulate click on hidden file input
+        });
+
+
+        // ... (Other JavaScript remains the same)
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                const file = files[0];
+
+                const formData = new FormData();
+                formData.append('file', file); // Add the file to the FormData object
+
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/', true); // Replace '/' with your server endpoint
+
+                xhr.upload.addEventListener('progress', (e) => {
+                    if (e.lengthComputable) {
+                        const progress = Math.round((e.loaded / e.total) * 100);
+                        progressBar.style.width = progress + '%';
+                        progressText.textContent = `${progress}%`;
+                    }
+                });
+
+                xhr.addEventListener('load', () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                         progressText.textContent = "Upload Complete!";
+                         // Handle successful upload, e.g., display a success message
+                    } else {
+                        progressText.textContent = "Upload Failed";
+                        console.error('Upload failed:', xhr.status, xhr.statusText); // Log the error for debugging
+                        // Handle upload error appropriately
+                    }
+                });
+
+                xhr.addEventListener('error', () => {
+                  progressText.textContent = "Upload Failed";
+                  console.error('Upload failed'); // Log the error
+                  // Handle the error
+                });
+
+
+                xhr.send(formData);
+            }
+        }
+
+    </script>
 </body>
 </html>
+
