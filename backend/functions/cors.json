@@ -1,0 +1,12 @@
+[
+  {
+    "origin": ["https://fashion-hack-348449317363.us-central1.run.app"],
+    "method": ["GET", "HEAD", "OPTIONS"],
+    "responseHeader": [
+      "Content-Type",
+      "Access-Control-Allow-Origin",
+      "Cache-Control"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

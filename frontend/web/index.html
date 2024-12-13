@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base href="$FLUTTER_BASE_HREF" />
+    <meta charset="UTF-8" />
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible" />
+    <meta name="description" content="Hack your closet with AI" />
+
+    <!-- iOS meta tags & icons -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Fashion Hack" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="icons/favicon.svg" />
+    <link
+      rel="icon"
+      type="image/png"
+      href="icons/favicon-96x96.png"
+      sizes="96x96"
+    />
+    <link rel="shortcut icon" href="icons/favicon.ico" />
+
+    <title>Fashion Hack</title>
+    <link rel="manifest" href="manifest.json" />
+
+    <style>
+      body {
+        background-color: #2196f3;
+      }
+
+      .loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 0;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        opacity: 1;
+        transition: opacity 0.3s ease-out;
+      }
+
+      .loading.fade-out {
+        opacity: 0;
+      }
+
+      .loading-content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .emoji-container {
+        display: flex;
+        gap: 6px;
+      }
+
+      .emoji-box {
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+      }
+
+      .emoji {
+        font-size: 28px;
+        line-height: 1;
+      }
+
+      .app-name {
+        margin-top: 8px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        font-size: 18px;
+        color: rgba(255, 255, 255, 0.9);
+        letter-spacing: 0.5px;
+      }
+
+      .loading-indicator {
+        margin-top: 24px;
+        width: 24px;
+        height: 24px;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        border-top: 2px solid white;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      @keyframes success {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.1);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .loading-text {
+        margin-top: 16px;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .success-animation {
+        animation: success 0.5s ease-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="loading" class="loading">
+      <div class="loading-content">
+        <div class="emoji-container">
+          <div class="emoji-box">
+            <span class="emoji">👕</span>
+          </div>
+          <div class="emoji-box">
+            <span class="emoji">👗</span>
+          </div>
+        </div>
+        <div class="app-name">
+          <span style="font-weight: 300">Fashion</span>
+          <span style="font-weight: 600">Hack</span>
+        </div>
+        <div class="loading-indicator"></div>
+        <div class="loading-text">Loading your closet</div>
+      </div>
+    </div>
+
+    <script src="flutter_bootstrap.js" async></script>
+  </body>
+</html>
